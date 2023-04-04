@@ -1,0 +1,66 @@
+---
+title: "Homework 6"
+author: "Franck Brych"
+date: "4/4/2023"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(randomForest)
+library(caret)
+```
+
+# Load the data
+```{r}
+vo = read.csv(url("https://web.stanford.edu/~hastie/ElemStatLearn/datasets/vowel.train"))
+vo = vo[,2:ncol(vo)]
+
+# Convert response variable to factor variable for RF classification
+vo$y = as.factor(vo$y)
+```
+
+# Fit the random forest or gradient boosted model to the "vowel.train" data using all of the 11 features using the default values of the tuning parameters.
+```{r}
+fit = randomForest(y~., data = vo)
+print(fit)
+plot(fit)
+```
+
+# Use 5-fold CV to tune the number of variables randomly sampled as candidates at each split if using random forest, or the ensemble size if using gradient boosting
+```{r}
+set.seed(24000)
+
+# min node sizes and sampled variables
+sampled_variables =  c(3,4,5)
+node_size = c(1,5,10,20,40,80)
+
+# cross-validation grid search - 5 folds.
+control = trainControl(method = 'cv', number = 5, search = 'grid')
+
+tunegrid = expand.grid(mtry = sampled_variables, min.node.size = node_size, splitrule = 'gini')
+grid_fits = train(y~., data = vo, metric = 'Accuracy', method = 'ranger',tuneGrid=tunegrid, trControl=control)
+
+# results
+grid_fits
+```
+
+# With the tuned model, make predictions using the majority vote method, and compute the misclassification rate using the "vowel.test" data.
+```{r}
+set.seed(24000)
+
+# build best model using parameters found earlier
+best_fit = randomForest(y~., data = vo, mtry = 3, nodesize = 1)
+
+# load in data
+t = read.csv(url("https://web.stanford.edu/~hastie/ElemStatLearn/datasets/vowel.test"))
+t = t[,2:ncol(t)]
+t$y = as.factor(t$y)
+
+# predict using best fit
+p = predict(best_fit, newdata = t)
+
+# confusion matrix
+confusionMatrix(t$y, p)
+```
+
