@@ -1,0 +1,319 @@
+HW7
+================
+Franck Brych
+4/13/2023
+
+# “Image Classification” tutorial.
+
+``` r
+# load data
+install_tensorflow()
+```
+
+    ## Installing: tensorflow-deps
+
+    ## + '/Users/brych/Library/r-miniconda-arm64/bin/conda' 'install' '--yes' '--prefix' '/Users/brych/Library/r-miniconda-arm64/envs/r-reticulate' '-c' 'apple' '-c' 'conda-forge' 'tensorflow-deps'
+
+    ## Installing: tensorflow-macos
+
+    ## Installing: tensorflow-metal
+
+``` r
+fashion_mnist <- dataset_fashion_mnist()
+# split train and test images
+c(train_images, train_labels) %<-% fashion_mnist$train
+c(test_images, test_labels) %<-% fashion_mnist$test
+dim(train_images)
+```
+
+    ## [1] 60000    28    28
+
+``` r
+dim(test_images)
+```
+
+    ## [1] 10000    28    28
+
+``` r
+# vector of all names of objects
+class_names = c('T-shirt/top',
+                'Trouser',
+                'Pullover',
+                'Dress',
+                'Coat', 
+                'Sandal',
+                'Shirt',
+                'Sneaker',
+                'Bag',
+                'Ankle boot')
+
+# image 1
+image_1 <- as.data.frame(train_images[1, , ])
+colnames(image_1) <- seq_len(ncol(image_1))
+image_1$y <- seq_len(nrow(image_1))
+image_1 <- gather(image_1, "x", "value", -y)
+image_1$x <- as.integer(image_1$x)
+
+# plot image 1
+ggplot(image_1, aes(x = x, y = y, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "blue", high = "orange", na.value = NA) +
+  scale_y_reverse() +
+  theme_minimal() +
+  theme(panel.grid = element_blank())   +
+  theme(aspect.ratio = 1) 
+```
+
+![](Homework7_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+
+``` r
+# Numeric color values - 0 to 1
+train_images <- train_images / 255
+test_images <- test_images / 255
+# plot again
+image_1 <- as.data.frame(train_images[1, , ])
+colnames(image_1) <- seq_len(ncol(image_1))
+image_1$y <- seq_len(nrow(image_1))
+image_1 <- gather(image_1, "x", "value", -y)
+image_1$x <- as.integer(image_1$x)
+
+# image 1 plot
+ggplot(image_1, aes(x = x, y = y, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient(low = "blue", high = "orange", na.value = NA) +
+  scale_y_reverse() +
+  theme_minimal() +
+  theme(panel.grid = element_blank())   +
+  theme(aspect.ratio = 1)
+```
+
+![](Homework7_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+
+``` r
+# first 25 images in dataset and ensure labels are applied properly
+par(mfcol=c(5,5))
+par(mar=c(0, 0, 1.5, 0), xaxs='i', yaxs='i')
+for (i in 1:25) { 
+  img <- train_images[i, , ]
+  img <- t(apply(img, 2, rev)) 
+  image(1:28, 1:28, img, col = gray((0:255)/255), xaxt = 'n', yaxt = 'n',
+        main = paste(class_names[train_labels[i] + 1]))
+}
+```
+
+![](Homework7_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+
+``` r
+# setting up the layers of the model
+model <- keras_model_sequential()
+model %>%
+  # transform from 28x28 pixel 2d array to 784 pixel 1d array
+  layer_flatten(input_shape = c(28, 28)) %>%
+  # 1st layer = 128 nodes
+  layer_dense(units = 128, activation = 'relu') %>%
+  # 2nd layer = 10 nodes, softmax indicates that these will show probabilities adding to 1 that the image belongs in one of the 10 digit classes
+  layer_dense(units = 10, activation = 'softmax')
+```
+
+``` r
+# compile model
+model %>% compile(
+  optimizer = 'adam', 
+  loss = 'sparse_categorical_crossentropy',
+  metrics = c('accuracy')
+)
+```
+
+``` r
+# train model
+model %>% fit(train_images, train_labels, epochs = 5, verbose = 2)
+```
+
+``` r
+score <- model %>% evaluate(test_images, test_labels, verbose = 0)
+
+cat('Test loss:', score[1], "\n")
+```
+
+    ## Test loss: 0.3669332
+
+``` r
+cat('Test accuracy:', score[2], "\n")
+```
+
+    ## Test accuracy: 0.871
+
+``` r
+# test set predictions on
+predictions <- model %>% predict(test_images)
+```
+
+``` r
+# plot predictions
+par(mfcol=c(5,5))
+par(mar=c(0, 0, 1.5, 0), xaxs='i', yaxs='i')
+for (i in 1:25) { 
+  img <- test_images[i, , ]
+  img <- t(apply(img, 2, rev)) 
+  # subtract 1 as labels go from 0 to 9
+  predicted_label <- which.max(predictions[i, ]) - 1
+  true_label <- test_labels[i]
+  if (predicted_label == true_label) {
+    color <- '#008800' 
+  } else {
+    color <- '#bb0000'
+  }
+  image(1:28, 1:28, img, col = gray((0:255)/255), xaxt = 'n', yaxt = 'n',
+        main = paste0(class_names[predicted_label + 1], " (",
+                      class_names[true_label + 1], ")"),
+        col.main = color)
+}
+```
+
+![](Homework7_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+
+# Use the Keras library to re-implement the simple neural network discussed during lecture for the mixture data (see nnet.R). Use a single 10-node hidden layer; fully connected.
+
+``` r
+# load data
+load(url('https://web.stanford.edu/~hastie/ElemStatLearn/datasets/ESL.mixture.rda'))
+mix <- ESL.mixture
+```
+
+``` r
+set.seed(24000)
+# initialize model
+k_model <- keras_model_sequential()
+
+# create 10-node hidden layer
+k_model %>%
+  # build 10-node hidden layer
+  layer_dense(units = 10, activation = 'relu') %>%
+  # build binary output layer
+  layer_dense(units = 2, activation = 'softmax') 
+
+# compile model
+k_model %>% compile(
+  optimizer = 'adam', 
+  loss = 'sparse_categorical_crossentropy',
+  metrics = c('accuracy')
+)
+```
+
+``` r
+set.seed(25000)
+# fit model
+k_model %>% fit(x = mix$x, y = mix$y, epochs = 5, verbose = 2)
+```
+
+``` r
+# check accuracy and loss
+k_score <- k_model %>% evaluate(mix$x, mix$y, verbose = 0)
+
+cat('Test loss:', k_score[1], "\n")
+```
+
+    ## Test loss: 0.9160841
+
+``` r
+cat('Test accuracy:', k_score[2], "\n")
+```
+
+    ## Test accuracy: 0.405
+
+``` r
+# Code to print mixture data with true contour line
+plot_mixture_data <- expression({
+  plot(mix$x[,1], mix$x[,2],
+       col=ifelse(mix$y==0, 'blue', 'orange'),
+       pch=20,
+       xlab=expression(x[1]),
+       ylab=expression(x[2]))
+  # draw Bayes (True) classification boundary
+  prob <- matrix(mix$prob, length(mix$px1), length(mix$px2))
+  cont <- contourLines(mix$px1, mix$px2, prob, levels=0.5)
+  rslt <- sapply(cont, lines, col='purple')
+})
+# test
+eval(plot_mixture_data)
+```
+
+![](Homework7_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+
+``` r
+set.seed(25000)
+# Predict values based on constructed model
+k_probs = k_model %>% predict(mix$xnew)
+plot_k_preds <- function() {
+  
+  # plot original data
+  eval(plot_mixture_data)
+
+  # compute + plot keras prediction
+  probs <- k_probs[,1]
+  probm <- matrix(probs, length(mix$px1), length(mix$px2))
+  cls <- contourLines(mix$px1, mix$px2, probm, levels=0.5)
+  rslt <- sapply(cls, lines, col='red', lwd = 2)
+  legend(-2.5,-1, legend=c("Bayes Classification Boundary", "Keras Model Prediction"), col=c("purple", "red"), lty=1:1, cex=0.5)
+}
+
+plot_k_preds()
+```
+
+![](Homework7_files/figure-gfm/unnamed-chunk-16-1.png)<!-- -->
+
+# Create a figure to illustrate that the predictions are or not similar using the ‘nnet’ function versus the Keras model.
+
+``` r
+set.seed(24000)
+# fit nnet model with same number of hidden nodes
+nn_fit = nnet(x=mix$x, y=mix$y, size=10, entropy=TRUE, decay=0)
+```
+
+    ## # weights:  41
+    ## initial  value 149.087446 
+    ## iter  10 value 96.609887
+    ## iter  20 value 87.437102
+    ## iter  30 value 79.455179
+    ## iter  40 value 75.623267
+    ## iter  50 value 72.203203
+    ## iter  60 value 68.387320
+    ## iter  70 value 64.566490
+    ## iter  80 value 61.048339
+    ## iter  90 value 60.653415
+    ## iter 100 value 58.457446
+    ## final  value 58.457446 
+    ## stopped after 100 iterations
+
+``` r
+# predict values based on new fit
+nn_probs <- predict(nn_fit, mix$xnew, type="raw")[,1]
+plot_nn_preds <- function() {
+  
+  # plot data
+  eval(plot_mixture_data)
+  
+  # plot nnet p
+  probs <- nn_probs
+  probm <- matrix(probs, length(mix$px1), length(mix$px2))
+  cls <- contourLines(mix$px1, mix$px2, probm, levels=0.5)
+  rslt <- sapply(cls, lines, col='green', lwd = 2)
+  
+  # plot keras p
+  probs1 <- k_probs
+  probm1 <-matrix(probs1, length(mix$px1), length(mix$px2))
+  cls1 <- contourLines(mix$px1, mix$px2, probm1, levels=0.5)
+  rslt1 <- sapply(cls1, lines, col='red', lwd = 2)
+  
+  # legend
+  legend(-2.5,-1, legend=c("Bayes Classification Boundary", "Keras Model Prediction", "NNet Model Prediction"), col=c("purple", "red","green"), lty=1:1, cex=0.5)
+  
+}
+
+plot_nn_preds()
+```
+
+    ## Warning in matrix(probs1, length(mix$px1), length(mix$px2)): data length
+    ## differs from size of matrix: [13662 != 69 x 99]
+
+![](Homework7_files/figure-gfm/unnamed-chunk-17-1.png)<!-- -->
